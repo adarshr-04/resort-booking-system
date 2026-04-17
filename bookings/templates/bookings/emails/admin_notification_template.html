@@ -1,0 +1,26 @@
+{% extends "bookings/emails/base_email.html" %}
+
+{% block content %}
+    <h2>🏨 New Booking Request</h2>
+    <p>A new reservation request has been submitted and is awaiting your review.</p>
+
+    <div class="highlight-box">
+        <p style="margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; opacity: 0.7;">Booking Overview</p>
+        <p style="margin: 10px 0 5px; font-weight: bold; font-size: 18px;">{{ room_name }}</p>
+        <p style="margin: 0; font-size: 14px;"><strong>Guest:</strong> {{ guest_name }} ({{ guest_email }})</p>
+        <p style="margin: 5px 0 0; font-size: 14px;"><strong>Dates:</strong> {{ check_in }} &mdash; {{ check_out }}</p>
+        <p style="margin: 5px 0 0; font-size: 14px;"><strong>Total Price:</strong> {{ total_price }}</p>
+    </div>
+
+    <p>Please take action below to manage this reservation:</p>
+
+    <div style="text-align: center; margin: 30px 0;">
+        <a href="{{ dashboard_url }}" class="button" style="background-color: #1A3C34;">Manage Request</a>
+    </div>
+
+    <p style="font-size: 12px; color: #666666; font-style: italic;">
+        Note: Clicking the button above will securely log you into the dashboard to review and finalize this booking.
+    </p>
+
+    <p>Please handle this request as soon as possible to ensure guest satisfaction.</p>
+{% endblock %}

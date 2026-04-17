@@ -1,0 +1,43 @@
+{% extends "bookings/emails/base_email.html" %}
+
+{% block content %}
+    {% if status == 'pending' %}
+        <h2>We&apos;ve Received Your Request</h2>
+        <p>Hello {{ guest_name }},</p>
+        <p>Thank you for choosing Coorg Pristine Woods. We have received your booking request and our team is currently reviewing it. We will notify you as soon as your stay is confirmed.</p>
+    
+    {% elif status == 'confirmed' %}
+        <h2>Your Stay is Confirmed</h2>
+        <p>Dear {{ guest_name }},</p>
+        <p>We are delighted to confirm your reservation. We are preparing everything for your arrival and look forward to hosting you in the heart of the forest.</p>
+    
+    {% elif status == 'cancelled' %}
+        <h2>Booking Update</h2>
+        <p>Dear {{ guest_name }},</p>
+        <p>We regret to inform you that we could not confirm your booking at this time.</p>
+        {% if reason %}
+            <div class="highlight-box">
+                <strong>Reason:</strong> {{ reason }}
+            </div>
+        {% endif %}
+        <p>We hope to have the opportunity to welcome you on another occasion.</p>
+    {% endif %}
+
+    <div class="highlight-box">
+        <p style="margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; opacity: 0.7;">Stay Details</p>
+        <p style="margin: 10px 0 5px; font-weight: bold; font-size: 18px;">{{ room_name }}</p>
+        <p style="margin: 0; font-size: 14px;">{{ check_in }} &mdash; {{ check_out }}</p>
+        <p style="margin: 10px 0 0; font-size: 14px; color: #666666;">Reservation ID: <strong>RES-{{ booking_id }}</strong></p>
+    </div>
+
+    {% if status != 'cancelled' %}
+        <div style="text-align: center;">
+            <a href="{{ frontend_url }}/dashboard" class="button">View My Reservation</a>
+        </div>
+    {% endif %}
+
+    <p style="margin-top: 40px;">If you have any special requirements or questions before your arrival, simply reply to this email or contact our concierge via the button above.</p>
+    
+    <p>Warm regards,<br>
+    The Guest Relations Team</p>
+{% endblock %}

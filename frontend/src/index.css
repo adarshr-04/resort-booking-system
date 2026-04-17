@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Coorg Linen & Emerald Palette - Classic, Clean, Understated Luxury */
+  --background: 45 25% 93%;         /* #F2EFE6 - Linen/Cream */
+  --foreground: 168 30% 12%;        /* Deep Dark Green text #1A3C34 */
+  --card: 0 0% 100%;
+  --card-foreground: 168 30% 12%;
+  --primary: 168 39% 16%;          /* #1A3C34 - Deep Emerald */
+  --primary-foreground: 45 25% 93%;
+  --secondary: 45 15% 88%;         /* Slightly darker beige */
+  --secondary-foreground: 168 39% 16%;
+  --muted: 45 10% 85%;
+  --muted-foreground: 168 15% 40%;
+  --accent: 168 39% 16%;           /* Accents are now solid Emerald */
+  --accent-foreground: 45 25% 93%;
+  --border: 45 15% 82%;
+  --input: 45 15% 82%;
+  --ring: 168 39% 16%;
+  --radius: 0rem;                  /* Crisp rectangles like Maybourne */
+}
+
+/* Cleanup: Root is now light. We can remove .light and .dark specific shifts */
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    background-image: none;
+    background-attachment: scroll;
+  }
+}
+
+/* Custom UI Utilities */
+.glass-panel {
+  @apply bg-white/50 backdrop-blur-md border border-black/5 shadow-sm;
+}
+
+.mist-overlay {
+  display: none; /* Removing fog effects for a cleaner look */
+}
+
+.forest-gradient {
+  background: hsl(var(--primary));
+}
+
+.sky-glow {
+  text-shadow: none; /* Removing glows */
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.animate-fade-in-up { animation: fadeInUp 0.8s ease-out forwards; }
+.animate-fade-in    { animation: fadeIn  0.6s ease-out forwards; }
+
+/* Luxury hover lift */
+.hover-lift { transition: transform 0.4s ease, box-shadow 0.4s ease; }
+.hover-lift:hover { transform: translateY(-4px); box-shadow: 0 20px 40px rgba(0,0,0,.10); }
+
+/* Smooth scroll */
+html { scroll-behavior: smooth; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: hsl(var(--muted)); }
+::-webkit-scrollbar-thumb { background: hsl(var(--muted-foreground)); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--foreground)); }
