@@ -18,6 +18,7 @@ from django.utils.decorators import method_decorator
 import random
 import string
 import google.generativeai as genai
+from datetime import date
 
 from .models import UserIdentity, Room, RoomImage, Amenity, Booking, Payment, Review, GlobalSetting, ServiceRequest, Experience
 from .serializers import (
@@ -34,18 +35,46 @@ User = get_user_model()
 # PART 1: Unified Login (OTP for ALL Users)
 # ─────────────────────────────────────────────
 
+class ResortEmailService:
+    @staticmethod
+    def send_branded_email(subject, template_name, context, recipient_list):
+        try:
+            # Add global context variables
+            context['frontend_url'] = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')
+            
+            html_message = render_to_string(template_name, context)
+            plain_message = strip_tags(html_message)
+
+            send_mail(
+                subject=subject,
+                message=plain_message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=recipient_list,
+                html_message=html_message,
+                fail_silently=False,
+            )
+            return True
+        except Exception as e:
+            print(f"[EMAIL ERROR] {e}")
+            return False
+
 class LoginRequestView(APIView):
     """
-    Step 1: Universal Login Request.
-    Authenticates email/password. If valid, sends OTP to email.
+    Step 1: Universal Login.
+    Sends OTP to email for both Guests and Admins.
     """
     permission_classes = [AllowAny]
 
     def post(self, request):
-        email = request.data.get('email', '').strip().lower()
-        password = request.data.get('password', '')
+        email = request.data.get('email')
+        password = request.data.get('password')
 
-        user = authenticate(request, email=email, password=password)
+        if not email or not password:
+            return Response({'error': 'Email and password are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        User = get_user_model()
+        user = authenticate(email=email, password=password)
+
         if not user:
             return Response({'error': 'Invalid credentials. Please check your email and password.'}, status=status.HTTP_401_UNAUTHORIZED)
 
@@ -64,27 +93,15 @@ class LoginRequestView(APIView):
         cache.set(f'login_otp_{email}', otp, timeout=600)
 
         # Send OTP email
-        try:
-            role_label = "Guest" # Only guests get here now
-            context = {
-                'otp': otp,
-                'timeout_minutes': 10,
-                'role_label': role_label,
-                'frontend_url': getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
-            }
-            html_message = render_to_string('bookings/emails/otp_email.html', context)
-            plain_message = strip_tags(html_message)
+        role_label = "Guest"
+        success = ResortEmailService.send_branded_email(
+            subject=f"🔐 Your {role_label} Login Code — Coorg Pristine Woods",
+            template_name='bookings/emails/otp_email.html',
+            context={'otp': otp, 'timeout_minutes': 10, 'role_label': role_label},
+            recipient_list=[email]
+        )
 
-            send_mail(
-                subject=f"🔐 Your {role_label} Login Code — Coorg Pristine Woods",
-                message=plain_message,
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[email],
-                html_message=html_message,
-                fail_silently=False,
-            )
-        except Exception as e:
-            print(f"[LOGIN OTP EMAIL ERROR] {e}")
+        if not success:
             return Response({'error': 'Could not send OTP email. Please try again later.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({'otp_required': True, 'email': email, 'message': 'OTP sent to your email.'})
@@ -530,112 +547,76 @@ class BookingViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Invalid payment signature'}, status=status.HTTP_400_BAD_REQUEST)
 
     def _send_guest_pending_email(self, booking):
-        try:
-            context = {
+        ResortEmailService.send_branded_email(
+            subject="🛎️ Booking Request Received — Coorg Pristine Woods",
+            template_name='bookings/emails/booking_guest_template.html',
+            context={
                 'guest_name': booking.user.email,
                 'room_name': booking.room.name,
                 'check_in': booking.check_in,
                 'check_out': booking.check_out,
                 'booking_id': booking.id,
-                'status': 'pending',
-                'frontend_url': getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
-            }
-            html_message = render_to_string('bookings/emails/booking_guest_template.html', context)
-            plain_message = strip_tags(html_message)
-
-            send_mail(
-                subject="Booking Request Received — Coorg Pristine Woods",
-                message=plain_message,
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[booking.user.email],
-                html_message=html_message,
-                fail_silently=True,
-            )
-        except: pass
+                'status': 'pending'
+            },
+            recipient_list=[booking.user.email]
+        )
 
     def _send_admin_action_email(self, booking):
-        frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+        frontend_url = getattr(settings, 'FRONTEND_URL', 'http://localhost:5173')
         
         # Create a seamless login token for the admin recipient
+        User = get_user_model()
         admin_user = User.objects.filter(is_staff=True).first()
         login_token = signing.dumps({'user_id': admin_user.id if admin_user else None}, salt='admin-login')
         
         # SINGLE LINK: Points to dashboard with login token
         dashboard_url = f"{frontend_url}/admin/bookings?login_token={login_token}"
 
-        try:
-            context = {
+        ResortEmailService.send_branded_email(
+            subject=f"🏨 New Booking Request — Action Required",
+            template_name='bookings/emails/admin_notification_template.html',
+            context={
                 'guest_name': booking.user.email,
                 'guest_email': booking.user.email,
                 'room_name': booking.room.name,
                 'check_in': booking.check_in,
                 'check_out': booking.check_out,
                 'total_price': f"INR {booking.total_price}",
-                'dashboard_url': dashboard_url,
-                'frontend_url': frontend_url
-            }
-            
-            html_message = render_to_string('bookings/emails/admin_notification_template.html', context)
-            plain_message = strip_tags(html_message)
-
-            send_mail(
-                subject=f"🏨 New Booking Request — Action Required",
-                message=plain_message,
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[getattr(settings, 'ADMIN_EMAIL', settings.EMAIL_HOST_USER)],
-                html_message=html_message,
-                fail_silently=True,
-            )
-        except: pass
+                'dashboard_url': dashboard_url
+            },
+            recipient_list=[settings.DEFAULT_FROM_EMAIL]
+        )
 
     def _send_guest_confirmed_email(self, booking):
-        try:
-            context = {
+        ResortEmailService.send_branded_email(
+            subject="✅ Booking Confirmed — Coorg Pristine Woods",
+            template_name='bookings/emails/booking_guest_template.html',
+            context={
                 'guest_name': booking.user.email,
                 'room_name': booking.room.name,
                 'check_in': booking.check_in,
                 'check_out': booking.check_out,
                 'booking_id': booking.id,
-                'status': 'confirmed',
-                'frontend_url': getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
-            }
-            html_message = render_to_string('bookings/emails/booking_guest_template.html', context)
-            plain_message = strip_tags(html_message)
-
-            send_mail(
-                subject="✅ Booking Confirmed — Coorg Pristine Woods",
-                message=plain_message,
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[booking.user.email],
-                html_message=html_message,
-                fail_silently=True,
-            )
-        except: pass
+                'status': 'confirmed'
+            },
+            recipient_list=[booking.user.email]
+        )
 
     def _send_guest_rejected_email(self, booking, reason):
-        try:
-            context = {
+        ResortEmailService.send_branded_email(
+            subject="🛎️ Booking Update — Coorg Pristine Woods",
+            template_name='bookings/emails/booking_guest_template.html',
+            context={
                 'guest_name': booking.user.email,
                 'room_name': booking.room.name,
                 'check_in': booking.check_in,
                 'check_out': booking.check_out,
                 'booking_id': booking.id,
                 'status': 'cancelled',
-                'reason': reason,
-                'frontend_url': getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
-            }
-            html_message = render_to_string('bookings/emails/booking_guest_template.html', context)
-            plain_message = strip_tags(html_message)
-
-            send_mail(
-                subject="Booking Update — Coorg Pristine Woods",
-                message=plain_message,
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[booking.user.email],
-                html_message=html_message,
-                fail_silently=True,
-            )
-        except: pass
+                'reason': reason
+            },
+            recipient_list=[booking.user.email]
+        )
 
 class PaymentViewSet(viewsets.ModelViewSet):
     queryset = Payment.objects.all()
@@ -709,12 +690,44 @@ class ServiceRequestViewSet(viewsets.ModelViewSet):
             raise serializers.ValidationError({"room": "Room information is required."})
 
         # Ensure room_id is passed to save()
-        serializer.save(
+        instance = serializer.save(
             room_id=room_id,
             booking_id=booking_id,
             is_verified=is_verified,
             guest_email=guest_email
         )
+
+        # NEW: Send Notification Email to Guest
+        if guest_email:
+            ResortEmailService.send_branded_email(
+                subject=f"🛎️ Request Received: {instance.get_request_type_display()} — Coorg Pristine Woods",
+                template_name='bookings/emails/service_request_guest.html',
+                context={
+                    'request_type': instance.get_request_type_display(),
+                    'description': instance.description,
+                    'room_name': instance.room.name if instance.room else "Your Room"
+                },
+                recipient_list=[guest_email]
+            )
+
+    def perform_update(self, serializer):
+        old_status = self.get_object().status
+        instance = serializer.save()
+        new_status = instance.status
+
+        # If status changed to 'resolved', send email
+        if old_status != 'resolved' and new_status == 'resolved':
+            guest_email = instance.guest_email or (instance.booking.user.email if instance.booking else None)
+            if guest_email:
+                ResortEmailService.send_branded_email(
+                    subject=f"✅ Service Completed: {instance.get_request_type_display()} — Coorg Pristine Woods",
+                    template_name='bookings/emails/service_request_resolved.html',
+                    context={
+                        'request_type': instance.get_request_type_display(),
+                        'description': instance.description,
+                    },
+                    recipient_list=[guest_email]
+                )
 
 class StaffOpsViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAdminUser]
@@ -739,6 +752,70 @@ class StaffOpsViewSet(viewsets.ViewSet):
             'room_statuses': rooms_data,
             'active_requests': ServiceRequestSerializer(requests, many=True).data
         })
+
+    @action(detail=False, methods=['get'])
+    def guest_profile(self, request):
+        email = request.query_params.get('email')
+        if not email:
+            return Response({'error': 'Email parameter is required'}, status=400)
+            
+        # Get all data for this guest
+        bookings = Booking.objects.filter(user__email=email).order_by('-check_in')
+        # Service requests might be linked by booking or by email (for portal requests)
+        requests = ServiceRequest.objects.filter(
+            models.Q(booking__user__email=email) | models.Q(guest_email=email)
+        ).order_by('-created_at')
+        reviews = Review.objects.filter(user__email=email).order_by('-created_at')
+        
+        # Calculate some stats
+        total_spent = sum(b.total_price for b in bookings if b.status in ['confirmed', 'completed'])
+        total_nights = sum(b.total_days for b in bookings if b.status in ['confirmed', 'completed'])
+        
+        return Response({
+            'profile': {
+                'email': email,
+                'total_spent': total_spent,
+                'total_stays': bookings.filter(status='completed').count(),
+                'total_nights': total_nights,
+                'loyalty_level': 'Platinum' if total_spent > 50000 else 'Gold' if total_spent > 20000 else 'Silver'
+            },
+            'bookings': BookingSerializer(bookings, many=True).data,
+            'requests': ServiceRequestSerializer(requests, many=True).data,
+            'reviews': ReviewSerializer(reviews, many=True).data
+        })
+
+    @action(detail=False, methods=['get'])
+    def revenue_analytics(self, request):
+        # Calculate monthly revenue for the current year
+        from django.db.models import Sum
+        from django.db.models.functions import ExtractMonth
+        import datetime
+        
+        current_year = datetime.datetime.now().year
+        monthly_revenue = Booking.objects.filter(
+            status='confirmed',
+            created_at__year=current_year
+        ).annotate(
+            month=ExtractMonth('created_at')
+        ).values('month').annotate(
+            total=Sum('total_price')
+        ).order_by('month')
+        
+        # Format for frontend chart
+        month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        formatted_data = []
+        
+        # Create a dict for easy lookup
+        revenue_map = {item['month']: float(item['total']) for item in monthly_revenue}
+        
+        # Fill all 12 months (even with 0)
+        for i in range(1, 13):
+            formatted_data.append({
+                'label': month_names[i-1],
+                'value': revenue_map.get(i, 0)
+            })
+            
+        return Response(formatted_data)
 
     @action(detail=True, methods=['post'])
     def update_room_status(self, request, pk=None):

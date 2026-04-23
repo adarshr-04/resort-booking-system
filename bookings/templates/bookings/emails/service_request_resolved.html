@@ -1,0 +1,23 @@
+{% extends "bookings/emails/base_email.html" %}
+
+{% block content %}
+<h2>Service Completed</h2>
+
+<p>Dear Guest,</p>
+
+<p>We are pleased to inform you that your request for <strong>{{ request_type }}</strong> has been completed.</p>
+
+<div class="highlight-box" style="border-left-color: #10B981;">
+    <p style="margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: #065F46; font-weight: bold;">Fulfillment Details</p>
+    <p style="margin: 5px 0 0; font-size: 14px;">{{ description }}</p>
+    <p style="margin: 10px 0 0; font-size: 10px; color: #666;">Status: Resolved & Verified</p>
+</div>
+
+<p>We hope this adds to the comfort of your stay. If anything else was required or if you are not satisfied with the service, please let us know immediately.</p>
+
+<p>Enjoy your time at the resort.</p>
+
+<p>Warm regards,<br>
+The Concierge Team<br>
+Coorg Pristine Woods</p>
+{% endblock %}

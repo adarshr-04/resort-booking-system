@@ -1,0 +1,21 @@
+{% extends "bookings/emails/base_email.html" %}
+
+{% block content %}
+<h2>Service Request Received</h2>
+
+<p>Dear Guest,</p>
+
+<p>We have received your request for <strong>{{ request_type }}</strong>. Our team has been notified and is attending to it promptly.</p>
+
+<div class="highlight-box">
+    <p style="margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: #1A3C34; font-weight: bold;">Request Details</p>
+    <p style="margin: 5px 0 0; font-size: 14px;">{{ description }}</p>
+    <p style="margin: 10px 0 0; font-size: 10px; color: #666;">Room: {{ room_name }} | Status: Processing</p>
+</div>
+
+<p>Our concierge team aims to fulfill all requests within 15 minutes. If you have any further requirements, please do not hesitate to contact the front desk.</p>
+
+<p>Warm regards,<br>
+The Concierge Team<br>
+Coorg Pristine Woods</p>
+{% endblock %}

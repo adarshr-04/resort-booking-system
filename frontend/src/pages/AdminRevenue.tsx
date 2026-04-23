@@ -27,13 +27,18 @@ function RevenueChart({ data }: { data: { label: string; value: number }[] }) {
 
 export default function AdminRevenue() {
   const [bookings, setBookings] = useState<Booking[]>([])
+  const [monthlyData, setMonthlyData] = useState<{ label: string; value: number }[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function loadData() {
       try {
-        const data = await api.getUsersBookings() // Using the staff endpoint
-        setBookings(data)
+        const [bookingsData, analyticsData] = await Promise.all([
+          api.getUsersBookings(),
+          api.getRevenueAnalytics()
+        ])
+        setBookings(bookingsData)
+        setMonthlyData(analyticsData)
       } catch (err) {
         console.error('Failed to load revenue data:', err)
       } finally {
@@ -46,16 +51,6 @@ export default function AdminRevenue() {
   const confirmedBookings = bookings.filter(b => b.status === 'confirmed')
   const totalRevenue = confirmedBookings.reduce((acc, b) => acc + Number(b.total_price), 0)
   const pendingRevenue = bookings.filter(b => b.status === 'pending').reduce((acc, b) => acc + Number(b.total_price), 0)
-
-  // Demo Monthly Data for Visual Impact
-  const monthlyData = [
-    { label: 'Jan', value: 12000 },
-    { label: 'Feb', value: 18000 },
-    { label: 'Mar', value: 15000 },
-    { label: 'Apr', value: totalRevenue || 5000 },
-    { label: 'May', value: 24000 },
-    { label: 'Jun', value: 31000 },
-  ]
 
   return (
     <DashboardLayout>

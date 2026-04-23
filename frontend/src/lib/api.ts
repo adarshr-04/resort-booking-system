@@ -405,6 +405,29 @@ export const api = {
     }))
   },
 
+  async getGuestProfile(email: string): Promise<{
+    profile: {
+      email: string;
+      total_spent: number;
+      total_stays: number;
+      total_nights: number;
+      loyalty_level: string;
+    };
+    bookings: Booking[];
+    requests: ServiceRequest[];
+    reviews: Review[];
+  }> {
+    return handleResponse(await fetch(`${API_BASE}/staff-ops/guest_profile/?email=${encodeURIComponent(email)}`, {
+      headers: getHeaders(),
+    }))
+  },
+
+  async getRevenueAnalytics(): Promise<{ label: string; value: number }[]> {
+    return handleResponse(await fetch(`${API_BASE}/staff-ops/revenue_analytics/`, {
+      headers: getHeaders(),
+    }))
+  },
+
   // Experiences
   async getExperiences(): Promise<Experience[]> {
     return handleResponse(await fetch(`${API_BASE}/experiences/`))
