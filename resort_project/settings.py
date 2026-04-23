@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-=tc20!spw^j@j(c7l^kj0#)84_lz2(@ti6is!^gcagi0ap!idh
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -122,7 +122,6 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [
     BASE_DIR / 'frontend' / 'dist',
-    BASE_DIR / 'frontend' / 'dist' / 'assets',
 ]
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
@@ -174,3 +173,7 @@ BACKEND_URL = 'http://127.0.0.1:8000'
 
 # Gemini AI API Key
 GEMINI_API_KEY = 'AQ.Ab8RN6LsDRWqhulfiDvaoi-Czh_r9QDgxM-1I8olKFgsbXMCuw'
+
+# Razorpay Configuration (Active Test Mode)
+RAZORPAY_KEY_ID = 'rzp_test_Sg61nLyLzohLG4'
+RAZORPAY_KEY_SECRET = 'Ykbm04LrwgFTyBpfNFpdVXkv'

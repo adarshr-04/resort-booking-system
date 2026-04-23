@@ -47,6 +47,17 @@ export function Footer() {
               <a href="mailto:reservations@pristinewoods.com" className="flex items-center gap-3 text-sm opacity-80 hover:opacity-100 transition-opacity">
                 <Mail className="w-4 h-4 flex-shrink-0" /><span>reservations@pristinewoods.com</span>
               </a>
+              <div className="pt-4 border-t border-white/10 mt-6 space-y-1.5">
+                <p className="text-[10px] tracking-widest uppercase text-accent font-medium mb-2">Distance to Airports</p>
+                <div className="flex justify-between items-center text-xs opacity-80">
+                  <span>Mangaluru (IXE)</span>
+                  <span>~ 140 km</span>
+                </div>
+                <div className="flex justify-between items-center text-xs opacity-80">
+                  <span>Bengaluru (BLR)</span>
+                  <span>~ 290 km</span>
+                </div>
+              </div>
             </div>
           </div>
 

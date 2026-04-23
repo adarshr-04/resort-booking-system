@@ -10,42 +10,41 @@ export default function RoomServicePortal() {
   const [experiences, setExperiences] = useState<Experience[]>([])
   const [selectedExperience, setSelectedExperience] = useState<Experience | null>(null)
   
-  const [step, setStep] = useState(1)
-  const [requestType, setRequestType] = useState('room_service')
-  const [description, setDescription] = useState('')
-  const [email, setEmail] = useState('')
-  const [otp, setOtp] = useState('')
-  const [requestId, setRequestId] = useState<number | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    if (roomId) {
-      api.getRoom(Number(roomId)).then(setRoom).catch(() => setError('Room not found'))
-      api.getExperiences().then(setExperiences).catch(() => console.error('Failed to load experiences'))
+    const [step, setStep] = useState(1)
+    const [requestType, setRequestType] = useState<'housekeeping' | 'supplies' | 'maintenance' | 'concierge' | 'other'>('concierge')
+    const [description, setDescription] = useState('')
+    const [email, setEmail] = useState('')
+    const [otp, setOtp] = useState('')
+    const [requestId, setRequestId] = useState<number | null>(null)
+    const [loading, setLoading] = useState(false)
+    const [error, setError] = useState('')
+  
+    useEffect(() => {
+      if (roomId) {
+        api.getRoom(Number(roomId)).then(setRoom).catch(() => setError('Room not found'))
+        api.getExperiences().then(setExperiences).catch(() => console.error('Failed to load experiences'))
+      }
+    }, [roomId])
+  
+    const handleCreateRequest = async (e: React.FormEvent) => {
+      e.preventDefault()
+      setLoading(true)
+      setError('')
+      try {
+        // Find if user is logged in to get a booking, otherwise backend will handle lookup by room
+        const res = await (api as any).createServiceRequest({
+          room: Number(roomId), // Corrected field name to match model
+          request_type: requestType,
+          description: selectedExperience ? `Booking for ${selectedExperience.name}. ${description}` : description,
+        })
+        setRequestId(res.id)
+        setStep(2) // Move to OTP step
+      } catch (err: any) {
+        setError(err.message || 'Failed to submit request')
+      } finally {
+        setLoading(false)
+      }
     }
-  }, [roomId])
-
-  const handleCreateRequest = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-    try {
-      const res = await api.createServiceRequest({
-        room: Number(roomId),
-        request_type: requestType,
-        experience: selectedExperience?.id,
-        description: selectedExperience ? `Booking for ${selectedExperience.name}. ${description}` : description,
-        guest_email: email
-      })
-      setRequestId(res.id)
-      setStep(2) // Move to OTP step
-    } catch (err: any) {
-      setError(err.message || 'Failed to submit request')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -63,7 +62,23 @@ export default function RoomServicePortal() {
   }
 
   if (!room) {
-    return <div className="min-h-screen bg-background flex items-center justify-center p-6 text-center">Loading Room Data...</div>
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-center">
+        {error ? (
+          <div className="max-w-xs space-y-4">
+             <div className="bg-destructive/10 text-destructive border border-destructive p-4 rounded text-sm italic">
+               {error}
+             </div>
+             <p className="text-xs text-muted-foreground">Please scan the QR code in your room again.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+            <span className="text-xs tracking-widest uppercase opacity-50 font-medium">Preparing Digital Concierge...</span>
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -85,16 +100,16 @@ export default function RoomServicePortal() {
               <label className="block text-[10px] tracking-widest uppercase text-muted-foreground mb-3 font-bold">Select Service</label>
               <div className="grid grid-cols-2 gap-4">
                 {[
-                  { id: 'room_service', icon: Utensils, label: 'Dining' },
+                  { id: 'concierge', icon: Utensils, label: 'Dining / Experiences' },
                   { id: 'housekeeping', icon: SprayCan, label: 'Housekeeping' },
-                  { id: 'experience', icon: Sparkles, label: 'Luxury Experiences' },
                   { id: 'maintenance', icon: Wrench, label: 'Maintenance' },
+                  { id: 'supplies', icon: ConciergeBell, label: 'Supplies' },
                   { id: 'other', icon: ConciergeBell, label: 'Other' },
                 ].map(type => (
                   <button
                     key={type.id}
                     type="button"
-                    onClick={() => setRequestType(type.id)}
+                    onClick={() => setRequestType(type.id as any)}
                     className={`p-4 flex flex-col items-center gap-2 border transition-all ${requestType === type.id ? 'border-accent bg-accent/5 text-accent' : 'border-border bg-background hover:border-accent/50'}`}
                   >
                     <type.icon className="w-6 h-6" />
@@ -104,7 +119,7 @@ export default function RoomServicePortal() {
               </div>
             </div>
 
-            {requestType === 'experience' && (
+            {requestType === 'concierge' && (
               <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
                 <label className="block text-[10px] tracking-widest uppercase text-muted-foreground font-bold">Recommended for You</label>
                 <div className="grid grid-cols-1 gap-4">

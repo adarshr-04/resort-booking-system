@@ -50,18 +50,53 @@ class UserIdentity(models.Model):
         return f.decrypt(self.aadhaar_number.encode()).decode()
 
 class Room(models.Model):
+    HOUSEKEEPING_STATUS = [
+        ('ready', 'Ready / Clean'),
+        ('dirty', 'Dirty / Pending'),
+        ('maintenance', 'Under Maintenance'),
+    ]
+
     name = models.CharField(max_length=100)
     description = models.TextField()
     price_per_day = models.DecimalField(max_digits=10, decimal_places=2)
     price_per_night = models.DecimalField(max_digits=10, decimal_places=2)
     capacity = models.IntegerField()
+    total_inventory = models.PositiveIntegerField(default=1, help_text="Number of identical rooms available for this type")
+    extra_bed_price = models.DecimalField(max_digits=10, decimal_places=2, default=1000.00, help_text="Additional price if guests exceed capacity")
     is_available = models.BooleanField(default=True)
     is_featured = models.BooleanField(default=False)
+    housekeeping_status = models.CharField(max_length=20, choices=HOUSEKEEPING_STATUS, default='ready')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
+
+class ServiceRequest(models.Model):
+    REQUEST_TYPES = [
+        ('housekeeping', 'Extra Housekeeping'),
+        ('supplies', 'Extra Supplies (Towels, Water)'),
+        ('maintenance', 'Maintenance Issue'),
+        ('concierge', 'Concierge Assistance'),
+        ('other', 'Other'),
+    ]
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    booking = models.ForeignKey('Booking', on_delete=models.CASCADE, related_name='service_requests')
+    request_type = models.CharField(max_length=20, choices=REQUEST_TYPES)
+    description = models.TextField(blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    staff_notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.get_request_type_display()} - Booking #{self.booking.id}"
 
 class RoomImage(models.Model):
     room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name='images')
@@ -100,6 +135,8 @@ class Booking(models.Model):
     price_per_day = models.DecimalField(max_digits=10, decimal_places=2)
     price_per_night = models.DecimalField(max_digits=10, decimal_places=2)
     total_price = models.DecimalField(max_digits=10, decimal_places=2)
+    has_extra_bed = models.BooleanField(default=False)
+    experiences = models.ManyToManyField('Experience', blank=True, related_name='bookings')
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -117,6 +154,12 @@ class Payment(models.Model):
     payment_method = models.CharField(max_length=50)
     payment_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     transaction_id = models.CharField(max_length=100, unique=True, blank=True, null=True)
+    
+    # Razorpay Specific Tracking
+    razorpay_order_id = models.CharField(max_length=100, blank=True, null=True)
+    razorpay_payment_id = models.CharField(max_length=100, blank=True, null=True)
+    razorpay_signature = models.CharField(max_length=255, blank=True, null=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -160,24 +203,25 @@ class Experience(models.Model):
 class ServiceRequest(models.Model):
     SERVICE_TYPES = [
         ('housekeeping', 'Housekeeping'),
-        ('room_service', 'Room Service'),
+        ('supplies', 'Supplies'),
+        ('concierge', 'Concierge'),
         ('maintenance', 'Maintenance'),
-        ('experience', 'Luxury Experience'),
         ('other', 'Other'),
     ]
     STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('accepted', 'Accepted'),
-        ('completed', 'Completed'),
+        ('resolved', 'Resolved'),
         ('cancelled', 'Cancelled'),
     ]
-    room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name='service_requests')
+    booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name='service_requests', null=True, blank=True)
+    room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name='room_service_requests')
     request_type = models.CharField(max_length=20, choices=SERVICE_TYPES)
     experience = models.ForeignKey(Experience, on_delete=models.SET_NULL, null=True, blank=True)
     description = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     otp = models.CharField(max_length=6, blank=True)
-    guest_email = models.EmailField()
+    guest_email = models.EmailField(blank=True, null=True)
     is_verified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

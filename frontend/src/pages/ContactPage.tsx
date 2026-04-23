@@ -4,10 +4,11 @@ import { MapPin, Phone, Mail, Calendar, Info } from 'lucide-react'
 import { Navbar } from '@/components/layout/Navbar'
 import { Footer } from '@/components/layout/Footer'
 import { Hero } from '@/components/sections/Hero'
-import { api, type Room } from '@/lib/api'
+import { api, type Room, type Experience } from '@/lib/api'
 import { AvailabilityCalendar } from '@/components/booking/AvailabilityCalendar'
 import { DateRange } from 'react-day-picker'
-import { format } from 'date-fns'
+import { format, differenceInDays } from 'date-fns'
+import { Plus, Check as CheckIcon } from 'lucide-react'
 
 export default function ContactPage() {
   const [searchParams] = useSearchParams()
@@ -17,6 +18,11 @@ export default function ContactPage() {
   const [bookedRanges, setBookedRanges] = useState<{check_in: string; check_out: string}[]>([])
   const [selectedRange, setSelectedRange] = useState<DateRange | undefined>()
   
+  // E-commerce Checkout State
+  const [step, setStep] = useState(1)
+  const [experiences, setExperiences] = useState<Experience[]>([])
+  const [selectedExperiences, setSelectedExperiences] = useState<number[]>([])
+
   const [form, setForm] = useState({ guests: '2', message: '' })
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
@@ -26,12 +32,14 @@ export default function ContactPage() {
     if (roomId) {
       async function loadRoomDetails() {
         try {
-          const [room, availability] = await Promise.all([
+          const [room, availability, exps] = await Promise.all([
             api.getRoom(parseInt(roomId as string)),
-            api.getRoomAvailability(parseInt(roomId as string))
+            api.getRoomAvailability(parseInt(roomId as string)),
+            api.getExperiences()
           ])
           setSelectedRoom(room)
           setBookedRanges(availability)
+          setExperiences(exps)
         } catch (err) {
           console.error('Failed to load room details:', err)
         }
@@ -65,7 +73,8 @@ export default function ContactPage() {
         room: parseInt(roomId!),
         check_in: format(selectedRange.from, 'yyyy-MM-dd'),
         check_out: format(selectedRange.to, 'yyyy-MM-dd'),
-        guests: parseInt(form.guests)
+        guests: parseInt(form.guests),
+        experience_ids: selectedExperiences
       })
       setSubmitted(true)
     } catch (err: any) {
@@ -116,9 +125,9 @@ export default function ContactPage() {
                     <h2 className="text-3xl font-light tracking-wide mb-8">Reservations & Enquiries</h2>
                     <div className="space-y-6">
                       {[
-                        { Icon: MapPin, label: 'Address', value: 'Via Serlas 27, 7500 St. Moritz, Switzerland' },
+                        { Icon: MapPin, label: 'Address', value: 'Madikeri - Virajpet Rd, Coorg, Karnataka, India' },
                         { Icon: Phone, label: 'Telephone', value: '+41 81 837 1100' },
-                        { Icon: Mail, label: 'Email', value: 'reservations@Pristine Woodspalace.com' },
+                        { Icon: Mail, label: 'Email', value: 'reservations@pristinewoods.com' },
                       ].map(({ Icon, label, value }) => (
                         <div key={label} className="flex items-start gap-4">
                           <div className="w-10 h-10 bg-secondary flex items-center justify-center flex-shrink-0">
@@ -130,6 +139,20 @@ export default function ContactPage() {
                           </div>
                         </div>
                       ))}
+                    </div>
+                    
+                    <div className="mt-8 pt-8 border-t border-border">
+                      <span className="inline-block text-xs tracking-[0.25em] uppercase text-accent mb-4">Airport Distances</span>
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center text-sm border-b border-border/50 pb-2">
+                          <span className="font-medium">Mangaluru Int. Airport (IXE)</span>
+                          <span className="text-muted-foreground">Approx. 140 km</span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="font-medium">Bengaluru Int. Airport (BLR)</span>
+                          <span className="text-muted-foreground">Approx. 290 km</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -166,7 +189,10 @@ export default function ContactPage() {
                 </div>
               ) : (
                 <div className="bg-background p-8 lg:p-12 border border-border sticky top-32">
-                  <h3 className="text-xl font-light mb-8 italic">Finalize Reservation</h3>
+                  <div className="flex items-center justify-between mb-8">
+                    <h3 className="text-xl font-light italic">Finalize Reservation</h3>
+                    <div className="text-xs text-muted-foreground tracking-widest uppercase">Step {step} of 3</div>
+                  </div>
                   
                   {error && (
                     <div className="bg-destructive/10 text-destructive text-sm p-4 mb-6 border border-destructive/20 text-center animate-in fade-in slide-in-from-top-2">
@@ -180,39 +206,144 @@ export default function ContactPage() {
                   )}
 
                   <form onSubmit={handleSubmit} className="space-y-6">
-                    <div className="p-4 bg-secondary/30 border border-border mb-6">
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="text-[10px] tracking-widest uppercase text-muted-foreground">Stay Dates</span>
-                      </div>
-                      <div className="text-sm font-medium">
-                        {selectedRange?.from ? (
-                          <>
-                            {format(selectedRange.from, 'PPP')}
-                            {selectedRange.to && ` — ${format(selectedRange.to, 'PPP')}`}
-                          </>
-                        ) : (
-                          <span className="text-muted-foreground italic">Highlight range on calendar</span>
-                        )}
-                      </div>
-                    </div>
+                    {step === 1 && (
+                      <div className="animate-in fade-in slide-in-from-bottom-2">
+                        <div className="p-4 bg-secondary/30 border border-border mb-6">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-[10px] tracking-widest uppercase text-muted-foreground">Stay Dates</span>
+                          </div>
+                          <div className="text-sm font-medium">
+                            {selectedRange?.from ? (
+                              <>
+                                {format(selectedRange.from, 'PPP')}
+                                {selectedRange.to && ` — ${format(selectedRange.to, 'PPP')}`}
+                              </>
+                            ) : (
+                              <span className="text-muted-foreground italic">Highlight range on calendar</span>
+                            )}
+                          </div>
+                        </div>
 
-                    <div>
-                      <label className="block text-xs tracking-wider uppercase mb-2">Number of Guests</label>
-                      <select name="guests" value={form.guests} onChange={handleChange} className="w-full px-4 py-3 text-sm border border-border bg-background focus:outline-none focus:ring-1 focus:ring-accent">
-                        {['1','2','3','4','5','6+'].map((n) => <option key={n} value={n}>{n} Guest{n !== '1' ? 's' : ''}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs tracking-wider uppercase mb-2">Special Requests</label>
-                      <textarea name="message" value={form.message} onChange={handleChange} rows={3} className="w-full px-4 py-3 text-sm border border-border bg-background focus:outline-none focus:ring-1 focus:ring-accent resize-none" placeholder="Any special requirements..." />
-                    </div>
-                    <button 
-                      type="submit" 
-                      disabled={loading || !roomId || !selectedRange?.to}
-                      className="w-full py-4 bg-primary text-primary-foreground text-sm tracking-widest uppercase hover:bg-primary/90 transition-colors disabled:opacity-50"
-                    >
-                      {loading ? 'Processing...' : roomId ? 'Complete Reservation' : 'Select a Room to Book'}
-                    </button>
+                        <div className="mb-6">
+                          <label className="block text-xs tracking-wider uppercase mb-2">Number of Guests</label>
+                          <select name="guests" value={form.guests} onChange={handleChange} className="w-full px-4 py-3 text-sm border border-border bg-background focus:outline-none focus:ring-1 focus:ring-accent">
+                            {['1','2','3','4','5','6+'].map((n) => <option key={n} value={n}>{n} Guest{n !== '1' ? 's' : ''}</option>)}
+                          </select>
+                        </div>
+                        <div className="mb-6">
+                          <label className="block text-xs tracking-wider uppercase mb-2">Special Requests (Optional)</label>
+                          <textarea name="message" value={form.message} onChange={handleChange} rows={2} className="w-full px-4 py-3 text-sm border border-border bg-background focus:outline-none focus:ring-1 focus:ring-accent resize-none" placeholder="Any special requirements..." />
+                        </div>
+                        
+                        <button 
+                          type="button" 
+                          onClick={() => {
+                            if (!selectedRange?.from || !selectedRange?.to) {
+                              setError("Please select dates first.");
+                              return;
+                            }
+                            setError(""); setStep(2);
+                          }}
+                          disabled={!roomId || !selectedRange?.to}
+                          className="w-full py-4 bg-primary text-primary-foreground text-sm tracking-widest uppercase hover:bg-primary/90 transition-colors disabled:opacity-50"
+                        >
+                          Next: Enhance Your Stay
+                        </button>
+                      </div>
+                    )}
+
+                    {step === 2 && (
+                      <div className="animate-in fade-in slide-in-from-right-4">
+                        <p className="text-sm text-muted-foreground mb-4">Elevate your experience with our luxury add-ons.</p>
+                        <div className="space-y-3 mb-6 max-h-[300px] overflow-y-auto pr-2">
+                          {experiences.map(exp => {
+                            const isSelected = selectedExperiences.includes(exp.id);
+                            return (
+                              <div 
+                                key={exp.id} 
+                                onClick={() => {
+                                  if (isSelected) {
+                                    setSelectedExperiences(prev => prev.filter(id => id !== exp.id))
+                                  } else {
+                                    setSelectedExperiences(prev => [...prev, exp.id])
+                                  }
+                                }}
+                                className={`p-4 border cursor-pointer transition-all ${isSelected ? 'border-accent bg-accent/5' : 'border-border hover:border-accent/50'}`}
+                              >
+                                <div className="flex justify-between items-start">
+                                  <div className="flex gap-3">
+                                    <div className={`w-5 h-5 mt-0.5 border flex items-center justify-center ${isSelected ? 'bg-accent border-accent' : 'border-muted-foreground/50'}`}>
+                                      {isSelected && <CheckIcon className="w-3 h-3 text-white" />}
+                                    </div>
+                                    <div>
+                                      <h4 className="text-sm font-bold text-foreground">{exp.name}</h4>
+                                      <p className="text-xs text-muted-foreground mt-1">{exp.description.substring(0, 50)}...</p>
+                                    </div>
+                                  </div>
+                                  <span className="text-sm text-accent whitespace-nowrap ml-2">₹ {exp.price}</span>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                        <div className="flex gap-4">
+                          <button type="button" onClick={() => setStep(1)} className="w-1/3 py-4 border border-border text-sm tracking-widest uppercase hover:bg-secondary transition-colors">Back</button>
+                          <button type="button" onClick={() => setStep(3)} className="w-2/3 py-4 bg-primary text-primary-foreground text-sm tracking-widest uppercase hover:bg-primary/90 transition-colors">Review Total</button>
+                        </div>
+                      </div>
+                    )}
+
+                    {step === 3 && (
+                      <div className="animate-in fade-in slide-in-from-right-4">
+                        <div className="bg-secondary/30 border border-border p-5 mb-6 space-y-3">
+                          <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Room Base Rate (Nightly)</span>
+                            <span>₹ {selectedRoom?.price_per_night}</span>
+                          </div>
+                          
+                          {selectedRange?.from && selectedRange?.to && (
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">Duration</span>
+                              <span>{differenceInDays(selectedRange.to, selectedRange.from)} Nights</span>
+                            </div>
+                          )}
+
+                          <div className="flex justify-between text-sm pt-2 border-t border-border/50">
+                            <span className="text-muted-foreground">Room Subtotal</span>
+                            <span>₹ {selectedRoom?.price_per_night && selectedRange?.from && selectedRange?.to ? (selectedRoom.price_per_night * differenceInDays(selectedRange.to, selectedRange.from)) : 0}</span>
+                          </div>
+
+                          {selectedExperiences.length > 0 && (
+                            <div className="pt-2 border-t border-border/50">
+                              <span className="text-xs tracking-widest uppercase text-muted-foreground block mb-2">Experiences Add-ons</span>
+                              {experiences.filter(e => selectedExperiences.includes(e.id)).map(e => (
+                                <div key={e.id} className="flex justify-between text-sm text-muted-foreground mb-1">
+                                  <span>+ {e.name}</span>
+                                  <span>₹ {e.price}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          
+                          <div className="flex justify-between items-center pt-4 border-t border-border mt-2">
+                            <span className="text-xl font-light tracking-widest uppercase">Grand Total</span>
+                            <span className="text-2xl text-accent font-light">
+                              ₹ {
+                                ((selectedRoom?.price_per_night || 0) * (selectedRange?.from && selectedRange?.to ? differenceInDays(selectedRange.to, selectedRange.from) : 0)) +
+                                experiences.filter(e => selectedExperiences.includes(e.id)).reduce((acc, curr) => acc + parseFloat(curr.price), 0)
+                              }
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-4">
+                          <button type="button" onClick={() => setStep(2)} className="w-1/3 py-4 border border-border text-sm tracking-widest uppercase hover:bg-secondary transition-colors" disabled={loading}>Back</button>
+                          <button type="submit" disabled={loading} className="w-2/3 py-4 bg-primary text-primary-foreground text-sm tracking-widest uppercase hover:bg-primary/90 transition-colors">
+                            {loading ? 'Processing...' : 'Confirm Book'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </form>
                 </div>
               )}

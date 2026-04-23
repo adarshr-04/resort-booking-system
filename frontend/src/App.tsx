@@ -17,6 +17,8 @@ import AdminSettings from './pages/AdminSettings'
 import AdminServices from './pages/AdminServices'
 import AdminActionPage from './pages/AdminActionPage'
 import RoomServicePortal from './pages/RoomServicePortal'
+import StaffHub from './pages/StaffHub'
+import GuestDashboard from './pages/GuestDashboard'
 import { AdminRoute } from './components/auth/AdminRoute'
 import { FloatingActions } from './components/layout/FloatingActions'
 import { ChatbotWidget } from './components/layout/ChatbotWidget'
@@ -64,6 +66,7 @@ export default function App() {
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/dashboard" element={<GuestDashboard />} />
         <Route path="/room-service/:roomId" element={<RoomServicePortal />} />
         <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboard /></AdminRoute>} />
         <Route path="/admin/bookings" element={<AdminRoute><AdminBookings /></AdminRoute>} />
@@ -72,6 +75,7 @@ export default function App() {
         <Route path="/admin/analytics" element={<AdminRoute><AdminRevenue /></AdminRoute>} />
         <Route path="/admin/settings" element={<AdminRoute><AdminSettings /></AdminRoute>} />
         <Route path="/admin/services" element={<AdminRoute><AdminServices /></AdminRoute>} />
+        <Route path="/admin/staff-hub" element={<AdminRoute><StaffHub /></AdminRoute>} />
         <Route path="/admin/action" element={<AdminActionPage />} />
         <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
       </Routes>

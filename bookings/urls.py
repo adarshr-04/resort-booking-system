@@ -5,8 +5,8 @@ from .views import (
     RoomImageViewSet, AmenityViewSet, BookingViewSet,
     PaymentViewSet, ReviewViewSet, GlobalSettingViewSet,
     ServiceRequestViewSet, ChatbotViewSet, ExperienceViewSet,
-    LoginRequestView, LoginVerifyView, RegisterRequestView, RegisterVerifyView,
-    BookingActionView, TokenLoginView,
+    StaffOpsViewSet, LoginRequestView, LoginVerifyView, RegisterRequestView, 
+    RegisterVerifyView, BookingActionView, TokenLoginView,
 )
 
 router = DefaultRouter()
@@ -22,6 +22,7 @@ router.register(r'settings', GlobalSettingViewSet, basename='settings')
 router.register(r'service-requests', ServiceRequestViewSet)
 router.register(r'chatbot', ChatbotViewSet, basename='chatbot')
 router.register(r'experiences', ExperienceViewSet)
+router.register(r'staff-ops', StaffOpsViewSet, basename='staff-ops')
 
 urlpatterns = [
     path('', include(router.urls)),

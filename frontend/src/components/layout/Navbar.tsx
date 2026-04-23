@@ -97,12 +97,19 @@ export function Navbar() {
             <div className="hidden lg:flex items-center gap-6">
               {isLoggedIn ? (
                 <div className="flex items-center gap-4">
+                  <Link to="/dashboard"
+                    className={cn('p-2 transition-colors flex items-center gap-2 text-xs tracking-widest uppercase', 
+                      isScrolled ? 'text-foreground hover:text-accent' : 'text-white hover:text-accent')}>
+                    <LayoutDashboard className="w-4 h-4" />
+                    <span className="hidden xl:inline">My Stays</span>
+                  </Link>
+
                   {isAdmin && (
                     <Link to="/admin/dashboard"
                       className={cn('p-2 transition-colors flex items-center gap-2 text-xs tracking-widest uppercase', 
                         isScrolled ? 'text-foreground hover:text-accent' : 'text-white hover:text-accent')}>
                       <LayoutDashboard className="w-4 h-4" />
-                      <span className="hidden xl:inline">Dashboard</span>
+                      <span className="hidden xl:inline">Admin</span>
                     </Link>
                   )}
                   <button onClick={handleLogout}
@@ -121,19 +128,23 @@ export function Navbar() {
                 </Link>
               )}
               
-              <Link to="/accommodations"
-                  onClick={(e) => {
-                    if (!isLoggedIn) {
-                      e.preventDefault()
+              <button 
+                  onClick={() => {
+                    const token = localStorage.getItem('access_token')
+                    if (!token) {
                       navigate('/login')
+                    } else if (location.pathname === '/accommodations') {
+                      document.getElementById('room-grid')?.scrollIntoView({ behavior: 'smooth' })
+                    } else {
+                      navigate('/accommodations')
                     }
                   }}
                   className={cn(
-                    "px-10 py-3.5 text-[11px] tracking-[0.25em] uppercase font-bold transition-all duration-300 rounded-none",
-                    isScrolled 
+                    "px-10 py-3.5 text-[11px] tracking-[0.25em] uppercase font-bold transition-all duration-300 rounded-none whitespace-nowrap",
+                    isScrolled || !isDark
                       ? "bg-primary text-primary-foreground hover:bg-primary/90" 
                       : "bg-white text-primary hover:bg-primary hover:text-white"
-                  )}>Book Now</Link>
+                  )}>Book Now</button>
             </div>
 
             <button onClick={() => setIsOpen(!isOpen)}

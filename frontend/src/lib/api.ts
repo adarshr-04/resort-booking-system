@@ -27,26 +27,41 @@ export interface Room {
   price_per_day: number
   price_per_night: number
   capacity: number
+  total_inventory: number
+  extra_bed_price: string
   is_available: boolean
   is_featured: boolean
-  images: RoomImage[]
-  amenities: Amenity[]
+  housekeeping_status: string
+  housekeeping_status_display: string
+  images: { id: number; image: string; alt_text: string; is_primary: boolean }[] | any[]
+  amenities: { id: number; name: string; icon_name: string }[] | any[]
 }
 
 export interface Booking {
   id: number
   user: number
-  user_name?: string
   user_email?: string
   user_phone?: string
+  user_name?: string
   room: number
   room_name?: string
   check_in: string
   check_out: string
   guests: number
+  has_extra_bed: boolean
   total_days: number
   total_price: number
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed'
+  experience_details?: Experience[]
+}
+
+export interface BookingCreateData {
+  room: number
+  check_in: string
+  check_out: string
+  guests: number
+  experience_ids?: number[]
+  has_extra_bed?: boolean
 }
 
 export interface Experience {
@@ -65,14 +80,31 @@ export interface ServiceRequest {
   request_type_display: string
   experience?: number
   description: string
-  status: 'pending' | 'accepted' | 'completed' | 'cancelled'
+  status: 'pending' | 'accepted' | 'completed' | 'cancelled' | 'resolved'
   guest_email: string
   is_verified: boolean
   created_at: string
 }
 
+export interface Review {
+  id: number
+  user: number
+  user_name: string
+  room: number
+  room_name: string
+  rating: number
+  comment: string
+  created_at: string
+}
+
 async function handleResponse(response: Response) {
   if (!response.ok) {
+    if (response.status === 401) {
+      // Clear expired session
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      throw new Error("Your session has expired. Please log out and login again to continue.");
+    }
     const error = await response.json().catch(() => ({}))
     // Django REST Framework often returns errors as an object: { "field_name": ["error message"] }
     // Or a single "detail" field
@@ -198,9 +230,7 @@ export const api = {
   },
 
   async getRoomAvailability(id: number): Promise<{check_in: string; check_out: string}[]> {
-    return handleResponse(await fetch(`${API_BASE}/rooms/${id}/availability/`, {
-      headers: getHeaders(),
-    }))
+    return handleResponse(await fetch(`${API_BASE}/rooms/${id}/availability/`))
   },
 
   // Bookings
@@ -210,7 +240,7 @@ export const api = {
     }))
   },
 
-  async createBooking(bookingData: { room: number; check_in: string; check_out: string; guests: number }) {
+  async createBooking(bookingData: { room: number; check_in: string; check_out: string; guests: number; experience_ids?: number[] }) {
     return handleResponse(await fetch(`${API_BASE}/bookings/`, {
       method: 'POST',
       headers: getHeaders(),
@@ -223,6 +253,22 @@ export const api = {
       method: 'PATCH',
       headers: getHeaders(),
       body: JSON.stringify({ status }),
+    }))
+  },
+
+  // Payment integration
+  async initializePayment(bookingId: number) {
+    return handleResponse(await fetch(`${API_BASE}/bookings/${bookingId}/initialize_payment/`, {
+      method: 'POST',
+      headers: getHeaders(),
+    }))
+  },
+
+  async verifyPayment(bookingId: number, paymentData: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) {
+    return handleResponse(await fetch(`${API_BASE}/bookings/${bookingId}/verify_payment/`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(paymentData),
     }))
   },
 
@@ -275,9 +321,23 @@ export const api = {
   },
 
   // Reviews
-  async getReviews() {
+  async getReviews(): Promise<Review[]> {
     return handleResponse(await fetch(`${API_BASE}/reviews/`, {
       headers: getHeaders(),
+    }))
+  },
+
+  async getRoomReviews(roomId: number): Promise<Review[]> {
+    return handleResponse(await fetch(`${API_BASE}/reviews/?room=${roomId}`, {
+      headers: getHeaders(),
+    }))
+  },
+
+  async createReview(data: { room: number; rating: number; comment: string }): Promise<Review> {
+    return handleResponse(await fetch(`${API_BASE}/reviews/`, {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify(data),
     }))
   },
 
@@ -288,11 +348,24 @@ export const api = {
     }))
   },
 
-  async createServiceRequest(requestData: { room: number; request_type: string; experience?: number; description?: string; guest_email: string }) {
+  async createServiceRequest(requestData: { 
+    booking?: number;
+    room?: number;
+    request_type: 'housekeeping' | 'supplies' | 'maintenance' | 'concierge' | 'other'; 
+    description?: string 
+  }) {
     return handleResponse(await fetch(`${API_BASE}/service-requests/`, {
       method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify(requestData),
+    }))
+  },
+
+  async updateServiceRequestStatus(id: number, status: 'pending' | 'resolved' | 'cancelled') {
+    return handleResponse(await fetch(`${API_BASE}/service-requests/${id}/`, {
+      method: 'PATCH',
+      headers: getHeaders(),
+      body: JSON.stringify({ status }),
     }))
   },
 
@@ -307,6 +380,26 @@ export const api = {
   async updateServiceStatus(id: number, status: string) {
     return handleResponse(await fetch(`${API_BASE}/service-requests/${id}/`, {
       method: 'PATCH',
+      headers: getHeaders(),
+      body: JSON.stringify({ status }),
+    }))
+  },
+
+  // Staff Operations
+  async getDailyOverview(): Promise<{
+    arrivals_today: Booking[];
+    departures_today: Booking[];
+    room_statuses: (Room & { housekeeping_status: string; housekeeping_status_display: string })[];
+    active_requests: any[];
+  }> {
+    return handleResponse(await fetch(`${API_BASE}/staff-ops/daily_overview/`, {
+      headers: getHeaders(),
+    }))
+  },
+
+  async updateRoomStatus(roomId: number, status: string) {
+    return handleResponse(await fetch(`${API_BASE}/staff-ops/${roomId}/update_room_status/`, {
+      method: 'POST',
       headers: getHeaders(),
       body: JSON.stringify({ status }),
     }))

@@ -43,13 +43,13 @@ export function FloatingActions() {
         )}
       </AnimatePresence>
 
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-row gap-3">
         <button 
           onClick={() => setShowWhatsApp(!showWhatsApp)}
           className="w-14 h-14 bg-[#25D366] text-white flex items-center justify-center shadow-xl hover:scale-110 transition-transform group relative"
         >
           <MessageCircle className="w-6 h-6" />
-          <span className="absolute left-full ml-4 px-3 py-1 bg-primary text-white text-[10px] tracking-widest uppercase opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+          <span className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 px-3 py-1 bg-primary text-white text-[10px] tracking-widest uppercase opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
             WhatsApp Concierge
           </span>
         </button>
@@ -59,7 +59,7 @@ export function FloatingActions() {
           className="w-14 h-14 bg-accent text-white flex items-center justify-center shadow-xl hover:scale-110 transition-transform group relative"
         >
           <Calendar className="w-6 h-6" />
-          <span className="absolute left-full ml-4 px-3 py-1 bg-primary text-white text-[10px] tracking-widest uppercase opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+          <span className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 px-3 py-1 bg-primary text-white text-[10px] tracking-widest uppercase opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
             Book Now
           </span>
         </a>

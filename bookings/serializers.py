@@ -37,6 +37,11 @@ class UserIdentitySerializer(serializers.ModelSerializer):
         identity.save()
         return identity
 
+class ExperienceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Experience
+        fields = '__all__'
+
 class RoomImageSerializer(serializers.ModelSerializer):
     class Meta:
         model = RoomImage
@@ -50,10 +55,11 @@ class AmenitySerializer(serializers.ModelSerializer):
 class RoomSerializer(serializers.ModelSerializer):
     images = RoomImageSerializer(many=True, read_only=True)
     amenities = serializers.SerializerMethodField()
+    housekeeping_status_display = serializers.CharField(source='get_housekeeping_status_display', read_only=True)
 
     class Meta:
         model = Room
-        fields = ('id', 'name', 'description', 'price_per_day', 'price_per_night', 'capacity', 'is_available', 'images', 'amenities')
+        fields = ('id', 'name', 'description', 'price_per_day', 'price_per_night', 'capacity', 'total_inventory', 'extra_bed_price', 'is_available', 'housekeeping_status', 'housekeeping_status_display', 'images', 'amenities')
 
     def get_amenities(self, obj):
         amenities = Amenity.objects.filter(roomamenity__room=obj)
@@ -64,11 +70,17 @@ class BookingSerializer(serializers.ModelSerializer):
     user_phone = serializers.ReadOnlyField(source='user.phone')
     user_name = serializers.SerializerMethodField()
     room_name = serializers.ReadOnlyField(source='room.name')
+    experience_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Experience.objects.filter(is_active=True),
+        many=True, write_only=True, required=False, source='experiences'
+    )
+
+    experience_details = ExperienceSerializer(many=True, read_only=True, source='experiences')
 
     class Meta:
         model = Booking
         fields = '__all__'
-        read_only_fields = ('user', 'total_days', 'total_price', 'price_per_day', 'price_per_night', 'user_email', 'user_phone', 'user_name', 'room_name')
+        read_only_fields = ('user', 'total_days', 'total_price', 'price_per_day', 'price_per_night', 'user_email', 'user_phone', 'user_name', 'room_name', 'experience_details')
 
     def get_user_name(self, obj):
         full_name = f"{obj.user.first_name} {obj.user.last_name}".strip()
@@ -78,33 +90,52 @@ class BookingSerializer(serializers.ModelSerializer):
         check_in = data.get('check_in')
         check_out = data.get('check_out')
         room = data.get('room')
+        guests = data.get('guests', 1)
+        
         if check_in and check_out:
             if check_in >= check_out:
                 raise serializers.ValidationError("Check-out must be after check-in")
 
-            # Strict Overlap Check: requested_in < existing_out AND requested_out > existing_in
-            overlapping_bookings = Booking.objects.filter(
+            # Inventory Check: How many rooms of this type are already booked for these dates?
+            overlapping_count = Booking.objects.filter(
                 room=room,
                 check_in__lt=check_out,
                 check_out__gt=check_in,
                 status__in=['pending', 'confirmed']
             )
             
-            if self.instance:
-                overlapping_bookings = overlapping_bookings.exclude(pk=self.instance.pk)
-            
-            if overlapping_bookings.exists():
-                raise serializers.ValidationError("This room is already reserved for the selected dates. Please choose different dates or another room.")
+            if self.instance and self.instance.pk:
+                overlapping_count = overlapping_count.exclude(pk=self.instance.pk)
+                
+            if overlapping_count.count() >= room.total_inventory:
+                raise serializers.ValidationError(
+                    f"All units of {room.name} are already reserved for these dates. "
+                    "Please choose different dates or another accommodation."
+                )
 
             delta = check_out - check_in
-            data['total_days'] = delta.days
+            total_days = delta.days
+            data['total_days'] = total_days
             
-            # Use room prices
             data['price_per_day'] = room.price_per_day
             data['price_per_night'] = room.price_per_night
             
-            # Simple calculation for total price using the night rate
-            data['total_price'] = delta.days * room.price_per_night
+            # Base Room Price
+            base_price = total_days * room.price_per_night
+            
+            # Guest Capacity & Extra Bed Logic
+            extra_bed_cost = 0
+            if guests > room.capacity:
+                data['has_extra_bed'] = True
+                extra_bed_cost = room.extra_bed_price * total_days
+            else:
+                data['has_extra_bed'] = False
+
+            # Add-on pricing (Experiences)
+            experiences = data.get('experiences', [])
+            addon_price = sum(exp.price for exp in experiences)
+            
+            data['total_price'] = base_price + extra_bed_cost + addon_price
 
         return data
 
@@ -114,9 +145,17 @@ class PaymentSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class ReviewSerializer(serializers.ModelSerializer):
+    user_name = serializers.SerializerMethodField(read_only=True)
+    room_name = serializers.ReadOnlyField(source='room.name')
+
     class Meta:
         model = Review
-        fields = '__all__'
+        fields = ['id', 'user', 'user_name', 'room', 'room_name', 'rating', 'comment', 'created_at']
+        read_only_fields = ['user', 'created_at']
+
+    def get_user_name(self, obj):
+        full = f"{obj.user.first_name} {obj.user.last_name}".strip()
+        return full if full else obj.user.email.split('@')[0].capitalize()
 
 class GlobalSettingSerializer(serializers.ModelSerializer):
     class Meta:
@@ -125,13 +164,27 @@ class GlobalSettingSerializer(serializers.ModelSerializer):
 
 class ServiceRequestSerializer(serializers.ModelSerializer):
     request_type_display = serializers.CharField(source='get_request_type_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    guest_name = serializers.SerializerMethodField(read_only=True)
+    room_name = serializers.SerializerMethodField(read_only=True)
     
     class Meta:
         model = ServiceRequest
         fields = '__all__'
-        read_only_fields = ('otp', 'is_verified')
+        extra_kwargs = {
+            'room': {'required': False},
+            'booking': {'required': False}
+        }
 
-class ExperienceSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Experience
-        fields = '__all__'
+    def get_guest_name(self, obj):
+        if obj.booking and obj.booking.user:
+            return obj.booking.user.email
+        return obj.guest_email or "Guest"
+
+    def get_room_name(self, obj):
+        if obj.room:
+            return obj.room.name
+        if obj.booking and obj.booking.room:
+            return obj.booking.room.name
+        return "Unknown Room"
+

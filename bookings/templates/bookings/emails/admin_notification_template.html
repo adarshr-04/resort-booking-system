@@ -7,7 +7,7 @@
     <div class="highlight-box">
         <p style="margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; opacity: 0.7;">Booking Overview</p>
         <p style="margin: 10px 0 5px; font-weight: bold; font-size: 18px;">{{ room_name }}</p>
-        <p style="margin: 0; font-size: 14px;"><strong>Guest:</strong> {{ guest_name }} ({{ guest_email }})</p>
+        <p style="margin: 0; font-size: 14px;"><strong>Guest:</strong> {{ guest_name }}{% if guest_name != guest_email %} ({{ guest_email }}){% endif %}</p>
         <p style="margin: 5px 0 0; font-size: 14px;"><strong>Dates:</strong> {{ check_in }} &mdash; {{ check_out }}</p>
         <p style="margin: 5px 0 0; font-size: 14px;"><strong>Total Price:</strong> {{ total_price }}</p>
     </div>

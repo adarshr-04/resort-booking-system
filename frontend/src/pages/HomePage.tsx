@@ -12,6 +12,7 @@ import { Newsletter } from '@/components/sections/Newsletter'
 import { MadikeriWidgets } from '@/components/sections/MadikeriWidgets'
 import { AmenitiesCards } from '@/components/sections/AmenitiesGrid'
 import { api, type Room } from '@/lib/api'
+import { BookingModal } from '@/components/booking/BookingModal'
 
 const features = [
   { title: 'Luxurious Accommodations', description: 'Elegantly appointed rooms and suites with breathtaking alpine views', imageSrc: 'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?q=80&w=2070&auto=format&fit=crop', href: '/accommodations' },
@@ -28,6 +29,8 @@ const testimonials = [
 export default function HomePage() {
   const [featuredRooms, setFeaturedRooms] = useState<Room[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
 
   useEffect(() => {
     async function loadFeaturedRooms() {
@@ -43,6 +46,11 @@ export default function HomePage() {
     }
     loadFeaturedRooms()
   }, [])
+
+  const handleBookNow = (room: Room) => {
+    setSelectedRoom(room)
+    setIsModalOpen(true)
+  }
 
   return (
     <main className="min-h-screen">
@@ -124,12 +132,8 @@ export default function HomePage() {
               {featuredRooms.map((room) => (
                 <RoomCard 
                   key={room.id}
-                  name={room.name}
-                  description={room.description}
-                  imageSrc={room.images[0]?.image || 'https://images.unsplash.com/photo-1590490360182-c33d57733427?q=80&w=2074&auto=format&fit=crop'}
-                  size={`${room.capacity} Guests`}
-                  capacity={`${room.price_per_night} / night`}
-                  href={`/contact?room=${room.id}`}
+                  room={room}
+                  onBookNow={() => handleBookNow(room)}
                 />
               ))}
             </div>
@@ -174,6 +178,14 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {selectedRoom && (
+        <BookingModal 
+          room={selectedRoom}
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+        />
+      )}
 
       <Newsletter />
       <Footer />

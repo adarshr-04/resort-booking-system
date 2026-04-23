@@ -10,19 +10,20 @@ export function MadikeriWidgets() {
   const [elevation, setElevation] = useState(0)
 
   useEffect(() => {
-    // 1. Fetch Real Weather for Madikeri
+    // 1. Fetch Real Weather for Coorg/Madikeri using Open-Meteo (free, no API key)
+    // Madikeri, Coorg GPS: 12.4244° N, 75.7382° E
     async function fetchWeather() {
       try {
-        const res = await fetch('https://wttr.in/Madikeri?format=%t')
-        const text = await res.text()
-        // Extract number from "+22°C" or similar
-        const match = text.match(/([+-]?\d+)/)
-        if (match) {
-          setTemp(parseInt(match[0]))
+        const res = await fetch(
+          'https://api.open-meteo.com/v1/forecast?latitude=12.4244&longitude=75.7382&current_weather=true&temperature_unit=celsius'
+        )
+        const data = await res.json()
+        if (data?.current_weather?.temperature !== undefined) {
+          setTemp(Math.round(data.current_weather.temperature))
         }
       } catch (err) {
         console.error('Weather fetch failed:', err)
-        setTemp(22) // Luxury fallback
+        setTemp(22) // Fallback
       }
     }
 

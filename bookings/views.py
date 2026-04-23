@@ -26,6 +26,7 @@ from .serializers import (
     PaymentSerializer, ReviewSerializer, GlobalSettingSerializer,
     ServiceRequestSerializer, ExperienceSerializer
 )
+from .razorpay_service import RazorpayService
 
 User = get_user_model()
 
@@ -388,11 +389,41 @@ class RoomViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def availability(self, request, pk=None):
         room = self.get_object()
-        bookings = Booking.objects.filter(
+        all_bookings = Booking.objects.filter(
             room=room, 
             status__in=['pending', 'confirmed']
         ).values('check_in', 'check_out')
-        return Response(list(bookings))
+        
+        # If inventory is 1, original logic is fine (more efficient)
+        if room.total_inventory <= 1:
+            return Response(list(all_bookings))
+            
+        # For multi-room inventory, we need to find dates where COUNT >= INVENTORY
+        from collections import Counter
+        from datetime import timedelta
+        
+        date_counts = Counter()
+        for b in all_bookings:
+            curr = b['check_in']
+            while curr < b['check_out']:
+                date_counts[curr] += 1
+                curr += timedelta(days=1)
+        
+        # Find dates that are fully booked
+        sold_out_dates = [d for d, count in date_counts.items() if count >= room.total_inventory]
+        sold_out_dates.sort()
+        
+        # Group consecutive dates into ranges for the frontend calendar
+        ranges = []
+        if sold_out_dates:
+            start = sold_out_dates[0]
+            for i in range(1, len(sold_out_dates)):
+                if sold_out_dates[i] != sold_out_dates[i-1] + timedelta(days=1):
+                    ranges.append({'check_in': start.isoformat(), 'check_out': (sold_out_dates[i-1] + timedelta(days=1)).isoformat()})
+                    start = sold_out_dates[i]
+            ranges.append({'check_in': start.isoformat(), 'check_out': (sold_out_dates[-1] + timedelta(days=1)).isoformat()})
+            
+        return Response(ranges)
 
 
 class RoomImageViewSet(viewsets.ModelViewSet):
@@ -430,6 +461,73 @@ class BookingViewSet(viewsets.ModelViewSet):
                 self._send_guest_confirmed_email(booking)
             elif new_status == 'cancelled':
                 self._send_guest_rejected_email(booking, "Cancelled by Admin.")
+
+    @action(detail=True, methods=['POST'])
+    def initialize_payment(self, request, pk=None):
+        booking = self.get_object()
+        rzp = RazorpayService()
+        
+        # Create Razorpay Order
+        receipt = f"Receipt_Booking_{booking.id}"
+        order = rzp.create_order(amount=float(booking.total_price), receipt=receipt)
+        
+        if not order:
+            return Response({'error': 'Failed to create Razorpay order'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        # Create or update Payment record
+        payment, created = Payment.objects.get_or_create(
+            booking=booking,
+            defaults={
+                'amount': booking.total_price,
+                'payment_method': 'Razorpay',
+                'payment_status': 'pending'
+            }
+        )
+        payment.razorpay_order_id = order['id']
+        payment.save()
+        
+        return Response({
+            'order_id': order['id'],
+            'amount': order['amount'],
+            'currency': order['currency'],
+            'key_id': settings.RAZORPAY_KEY_ID
+        })
+
+    @action(detail=True, methods=['POST'])
+    def verify_payment(self, request, pk=None):
+        booking = self.get_object()
+        razorpay_order_id = request.data.get('razorpay_order_id')
+        razorpay_payment_id = request.data.get('razorpay_payment_id')
+        razorpay_signature = request.data.get('razorpay_signature')
+        
+        rzp = RazorpayService()
+        is_valid = rzp.verify_payment_signature(
+            razorpay_order_id=razorpay_order_id,
+            razorpay_payment_id=razorpay_payment_id,
+            razorpay_signature=razorpay_signature
+        )
+        
+        if is_valid:
+            # Update Payment
+            try:
+                payment = booking.payment
+                payment.razorpay_payment_id = razorpay_payment_id
+                payment.razorpay_signature = razorpay_signature
+                payment.payment_status = 'success'
+                payment.save()
+                
+                # Update Booking
+                booking.status = 'confirmed'
+                booking.save()
+                
+                # Send confirmation email
+                self._send_guest_confirmed_email(booking)
+                
+                return Response({'status': 'Payment verified and booking confirmed'})
+            except Payment.DoesNotExist:
+                return Response({'error': 'Payment record not found'}, status=status.HTTP_404_NOT_FOUND)
+        else:
+            return Response({'error': 'Invalid payment signature'}, status=status.HTTP_400_BAD_REQUEST)
 
     def _send_guest_pending_email(self, booking):
         try:
@@ -545,8 +643,27 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
 
 class ReviewViewSet(viewsets.ModelViewSet):
-    queryset = Review.objects.all()
+    queryset = Review.objects.all().order_by('-created_at')
     serializer_class = ReviewSerializer
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [AllowAny()]
+        return [permissions.IsAuthenticated()]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        room_id = self.request.query_params.get('room')
+        if room_id:
+            qs = qs.filter(room_id=room_id)
+        return qs
+
+    def perform_create(self, serializer):
+        room = serializer.validated_data.get('room')
+        # One review per room per user
+        if Review.objects.filter(user=self.request.user, room=room).exists():
+            raise serializers.ValidationError("You have already reviewed this room.")
+        serializer.save(user=self.request.user)
 
 
 class GlobalSettingViewSet(viewsets.ModelViewSet):
@@ -558,39 +675,80 @@ class GlobalSettingViewSet(viewsets.ModelViewSet):
 class ServiceRequestViewSet(viewsets.ModelViewSet):
     queryset = ServiceRequest.objects.all()
     serializer_class = ServiceRequestSerializer
-    permission_classes = [AllowAny]
+    permission_classes = [permissions.IsAuthenticated]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            print(f"DEBUG: ServiceRequest validation failed: {serializer.errors}")
+        return super().create(request, *args, **kwargs)
+
+    def get_queryset(self):
+        if self.request.user.is_staff:
+            return ServiceRequest.objects.all()
+        return ServiceRequest.objects.filter(booking__user=self.request.user)
 
     def perform_create(self, serializer):
-        otp = ''.join(random.choices(string.digits, k=6))
-        instance = serializer.save(otp=otp)
+        data = self.request.data
+        booking_id = data.get('booking')
+        room_id = data.get('room') or data.get('room_id')
         
-        try:
-            context = {
-                'otp': otp,
-                'timeout_minutes': 15,
-                'frontend_url': getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
-            }
-            html_message = render_to_string('bookings/emails/otp_email.html', context)
-            plain_message = strip_tags(html_message)
+        # If room_id is missing but booking_id is present, get room from booking
+        if not room_id and booking_id:
+            try:
+                booking = Booking.objects.get(id=booking_id)
+                room_id = booking.room_id
+            except Booking.DoesNotExist:
+                pass
 
-            send_mail(
-                subject="🛎️ Service Request Verification — Coorg Pristine Woods",
-                message=plain_message,
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                recipient_list=[instance.guest_email],
-                html_message=html_message,
-                fail_silently=True,
-            )
-        except: pass
+        is_verified = self.request.user.is_authenticated
+        guest_email = self.request.user.email if self.request.user.is_authenticated else data.get('guest_email')
+        
+        # Final safety check: if room_id is still missing, we can't save
+        if not room_id:
+            raise serializers.ValidationError({"room": "Room information is required."})
+
+        # Ensure room_id is passed to save()
+        serializer.save(
+            room_id=room_id,
+            booking_id=booking_id,
+            is_verified=is_verified,
+            guest_email=guest_email
+        )
+
+class StaffOpsViewSet(viewsets.ViewSet):
+    permission_classes = [permissions.IsAdminUser]
+
+    @action(detail=False, methods=['get'])
+    def daily_overview(self, request):
+        today = date.today()
+        
+        arrivals = Booking.objects.filter(check_in=today, status='confirmed')
+        departures = Booking.objects.filter(check_out=today, status='confirmed')
+        
+        # Room inventory summary
+        rooms = Room.objects.all()
+        rooms_data = RoomSerializer(rooms, many=True).data
+        
+        # Pending service requests
+        requests = ServiceRequest.objects.filter(status='pending')
+        
+        return Response({
+            'arrivals_today': BookingSerializer(arrivals, many=True).data,
+            'departures_today': BookingSerializer(departures, many=True).data,
+            'room_statuses': rooms_data,
+            'active_requests': ServiceRequestSerializer(requests, many=True).data
+        })
 
     @action(detail=True, methods=['post'])
-    def verify_otp(self, request, pk=None):
-        instance = self.get_object()
-        if instance.otp == request.data.get('otp'):
-            instance.is_verified = True
-            instance.save()
+    def update_room_status(self, request, pk=None):
+        room = Room.objects.get(pk=pk)
+        new_status = request.data.get('status')
+        if new_status in [s[0] for s in Room.HOUSEKEEPING_STATUS]:
+            room.housekeeping_status = new_status
+            room.save()
             return Response({'status': 'OK'})
-        return Response({'error': 'Invalid'}, status=400)
+        return Response({'error': 'Invalid status'}, status=400)
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -602,11 +760,31 @@ class ChatbotViewSet(viewsets.ViewSet):
         user_message = request.data.get('message')
         api_key = getattr(settings, 'GEMINI_API_KEY', None)
         try:
+            if not api_key or not api_key.startswith('AIza'):
+                # Automated Failover to Resort Expert Mode
+                return self.get_fallback_response(user_message)
+                
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-flash-latest')
-            response = model.generate_content(f"Be a resort concierge. Guest says: {user_message}")
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = model.generate_content(f"You are a helpful luxury resort concierge at Coorg Pristine Woods. Use a professional, welcoming tone. Guest says: {user_message}")
             return Response({'reply': response.text})
-        except: return Response({'reply': 'Error'}, status=500)
+        except Exception as e:
+            print(f"Chatbot API Error: {str(e)}")
+            return self.get_fallback_response(user_message)
+
+    def get_fallback_response(self, message):
+        msg = message.lower()
+        if 'about' in msg or 'resort' in msg:
+            reply = "Coorg Pristine Woods is a luxury sanctuary nestled in the heart of Coorg, offering unparalleled comfort and breathtaking views. We feature premium suites, an infinity pool, and guided nature experiences."
+        elif 'dining' in msg or 'eat' in msg:
+            reply = "Our signature restaurant offers a fusion of local Kodava flavors and international cuisine. We also offer private deck dining for a romantic experience."
+        elif 'activity' in msg or 'activities' in msg:
+            reply = "We offer coffee plantation tours, bird watching, riverside meditation, and traditional Ayurvedic spa treatments."
+        elif 'stay' in msg:
+            reply = "I can help with information about your current stay. Please let me know if you need housekeeping, room upgrades, or concierge services."
+        else:
+            reply = "Welcome to Coorg Pristine Woods! I am here to assist you with dining, activities, or any special requests you might have. How can I make your stay memorable?"
+        return Response({'reply': reply})
 
 
 class ExperienceViewSet(viewsets.ReadOnlyModelViewSet):

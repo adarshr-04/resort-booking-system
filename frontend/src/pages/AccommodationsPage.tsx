@@ -1,54 +1,65 @@
 import { useState, useEffect } from 'react'
-import { Check } from 'lucide-react'
+import { Check, Star } from 'lucide-react'
 import { Navbar } from '@/components/layout/Navbar'
 import { Footer } from '@/components/layout/Footer'
 import { Hero } from '@/components/sections/Hero'
 import { SectionHeader } from '@/components/sections/SectionHeader'
 import { RoomCard } from '@/components/sections/RoomCard'
+import { BookingModal } from '@/components/booking/BookingModal'
 import { Newsletter } from '@/components/sections/Newsletter'
-import { api, type Room } from '@/lib/api'
+import { api, type Room, type Review } from '@/lib/api'
 
 const amenities = ['Complimentary high-speed WiFi', 'In-room Nespresso machine', 'Premium bath amenities', 'Plush bathrobes and slippers', '24-hour room service', 'Twice-daily housekeeping', 'Turndown service', 'Pillow menu', 'In-room safe', 'Mini bar', 'Smart TV with streaming', 'Climate control']
 
 export default function AccommodationsPage() {
   const [rooms, setRooms] = useState<Room[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [reviews, setReviews] = useState<Review[]>([])
 
-  const groupedRooms = rooms.reduce((acc, room) => {
-    // Group by base name: "Palace Suite #1" -> "Palace Suite"
-    const typeName = room.name.includes('#') ? room.name.split(' #')[0] : room.name
-    if (!acc[typeName]) {
-      acc[typeName] = { ...room, name: typeName, count: 0 }
-    }
-    acc[typeName].count += 1
-    return acc
-  }, {} as Record<string, Room & { count: number }>)
-
-  const displayRooms = Object.values(groupedRooms)
+  const totalCapacity = rooms.reduce((sum, r) => sum + (r.total_inventory || 1), 0)
 
   useEffect(() => {
-    async function loadRooms() {
+    async function loadData() {
       try {
-        const data = await api.getRooms()
-        setRooms(data)
+        const [roomData, reviewData] = await Promise.all([
+          api.getRooms(),
+          api.getReviews()
+        ])
+        setRooms(roomData)
+        setReviews(reviewData)
       } catch (error) {
-        console.error('Failed to load rooms:', error)
+        console.error('Failed to load data:', error)
       } finally {
         setLoading(false)
       }
     }
-    loadRooms()
+    loadData()
   }, [])
 
+  const handleBookNow = (room: Room) => {
+    setSelectedRoom(room)
+    setIsModalOpen(true)
+  }
+
+  const amenities = [
+    "Personal Butler Service",
+    "Private Balcony with Alps View",
+    "Heated Marbel Floors",
+    "Smart Scene Lighting",
+    "En-suite Spa Bath",
+    "Nespresso Ritual Kit"
+  ]
+
   return (
-    <main className="min-h-screen">
+    <main className="min-h-screen bg-background font-serif">
       <Navbar />
+      
       <Hero 
-        title="Rooms & Suites" 
-        subtitle="Your Alpine Sanctuary" 
-        description="Each accommodation is a masterpiece of Swiss craftsmanship, offering unparalleled comfort and breathtaking views" 
-        imageSrc="https://images.unsplash.com/photo-1631049307264-da0ec9d70304?q=80&w=2070&auto=format&fit=crop" 
-        height="large" 
+        title="Your Sanctuary Awaits" 
+        subtitle="Select the perfect backdrop for your alpine memories."
+        imageSrc="https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?q=80&w=2070&auto=format&fit=crop"
         showScrollIndicator={false} 
       />
 
@@ -64,15 +75,15 @@ export default function AccommodationsPage() {
             <div className="bg-secondary/50 border border-border px-8 py-6 text-center min-w-[200px] animate-in fade-in slide-in-from-right-4 duration-700">
               <p className="text-[10px] tracking-[0.3em] uppercase text-muted-foreground mb-1 font-bold">Resort Capacity</p>
               <div className="text-3xl font-light text-accent">
-                {loading ? '--' : rooms.length}
+                {loading ? '--' : totalCapacity}
               </div>
-              <p className="text-[9px] tracking-widest uppercase text-muted-foreground mt-1">Exquisite Suites Available</p>
+              <p className="text-[9px] tracking-widest uppercase text-muted-foreground mt-1">Exquisite Units Available</p>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="py-12 lg:py-20 bg-secondary">
+      <section id="room-grid" className="py-12 lg:py-20 bg-secondary">
         <div className="container mx-auto px-6">
           {loading ? (
             <div className="flex justify-center py-20">
@@ -80,19 +91,15 @@ export default function AccommodationsPage() {
             </div>
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {displayRooms.map((room) => (
+              {rooms.map((room) => (
                 <RoomCard 
                   key={room.id}
-                  name={room.name}
-                  description={room.description}
-                  imageSrc={room.images[0]?.image || 'https://images.unsplash.com/photo-1590490360182-c33d57733427?q=80&w=2074&auto=format&fit=crop'}
-                  size={`${room.capacity} Guests`}
-                  capacity={`${room.price_per_night} / night`}
-                  href={`/contact?room=${room.id}`}
-                  units={room.count}
+                  room={room}
+                  units={room.total_inventory}
+                  onBookNow={handleBookNow}
                 />
               ))}
-              {displayRooms.length === 0 && (
+              {rooms.length === 0 && (
                 <div className="col-span-full text-center py-20 text-muted-foreground">
                   No rooms available at the moment.
                 </div>
@@ -129,25 +136,38 @@ export default function AccommodationsPage() {
             <h2 className="text-3xl md:text-5xl font-light tracking-wide mb-8">What Our Guests Say</h2>
           </div>
           
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[
-              { text: "Absolutely breathtaking views of the Alps. The service was impeccable.", author: "Royal GuestRef #101" },
-              { text: "A truly royal experience. The personal butler was a nice touch.", author: "Alpine Traveler" },
-              { text: "The most breakfast selection I've ever seen. Can't wait to return!", author: "Summer Visitor" }
-            ].map((review, i) => (
-              <div key={i} className="bg-background border border-border p-10 flex flex-col items-center text-center shadow-sm">
-                <div className="flex gap-1 mb-6">
-                  {[...Array(5)].map((_, i) => (
-                    <span key={i} className="text-accent text-sm">★</span>
-                  ))}
+          {reviews.length === 0 ? (
+            <p className="text-center text-sm italic text-muted-foreground py-10">
+              Be the first to share your experience after your stay.
+            </p>
+          ) : (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {reviews.slice(0, 6).map((review) => (
+                <div key={review.id} className="bg-background border border-border p-10 flex flex-col shadow-sm hover:shadow-md transition-shadow">
+                  <div className="flex gap-1 mb-4">
+                    {[1,2,3,4,5].map(s => (
+                      <Star key={s} className={`w-4 h-4 ${ s <= review.rating ? 'fill-amber-400 text-amber-400' : 'text-gray-200'}`} />
+                    ))}
+                  </div>
+                  <p className="text-sm italic leading-relaxed text-muted-foreground mb-6 flex-1">"{review.comment}"</p>
+                  <div className="border-t border-border pt-4">
+                    <span className="text-[10px] tracking-[0.2em] uppercase font-bold text-accent">{review.user_name}</span>
+                    <p className="text-[9px] text-muted-foreground tracking-widest mt-0.5">{review.room_name}</p>
+                  </div>
                 </div>
-                <p className="text-sm italic leading-relaxed text-muted-foreground mb-8">"{review.text}"</p>
-                <span className="text-[10px] tracking-[0.2em] uppercase font-bold text-accent">{review.author}</span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
+
+      {selectedRoom && (
+        <BookingModal 
+          room={selectedRoom}
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+        />
+      )}
 
       <Newsletter />
       <Footer />

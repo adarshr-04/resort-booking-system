@@ -1,12 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { DashboardLayout } from '@/components/layout/DashboardLayout'
 import { api, type Room } from '@/lib/api'
-import { Bed, Users, Eye, Plus, Edit2, X } from 'lucide-react'
+import { Bed, Users, Eye, Plus, Edit2, X, QrCode, Download, Printer } from 'lucide-react'
+import { QRCodeCanvas } from 'qrcode.react'
 
 export default function AdminRooms() {
   const [rooms, setRooms] = useState<Room[]>([])
   const [loading, setLoading] = useState(true)
   const [isAdding, setIsAdding] = useState(false)
+  const [qrRoom, setQrRoom] = useState<Room | null>(null)
+  const qrRef = useRef<HTMLDivElement>(null)
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -15,6 +18,12 @@ export default function AdminRooms() {
     capacity: '2',
     is_available: true
   })
+
+  // Use the local network IP so QR codes work when scanned from phones
+  const servicePortalUrl = (roomId: number) => {
+    const host = window.location.host // e.g. 127.0.0.1:8000 or 192.168.109.173:8000
+    return `http://${host}/room-service/${roomId}`
+  }
 
   async function loadRooms() {
     setLoading(true)
@@ -48,16 +57,46 @@ export default function AdminRooms() {
     }
   }
 
+  const handleDownloadQR = () => {
+    if (!qrRoom) return
+    const canvas = qrRef.current?.querySelector('canvas')
+    if (!canvas) return
+    const url = canvas.toDataURL('image/png')
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `QR-Room-${qrRoom.name.replace(/\s+/g, '-')}.png`
+    link.click()
+  }
+
+  const handlePrintQR = () => {
+    if (!qrRoom) return
+    const canvas = qrRef.current?.querySelector('canvas')
+    if (!canvas) return
+    const dataUrl = canvas.toDataURL('image/png')
+    const win = window.open('', '_blank')
+    if (!win) return
+    win.document.write(`
+      <html><head><title>QR Code — ${qrRoom.name}</title></head>
+      <body style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;background:#fafafa;gap:16px;">
+        <h1 style="font-size:14px;letter-spacing:4px;text-transform:uppercase;color:#333;">${qrRoom.name}</h1>
+        <img src="${dataUrl}" style="width:220px;height:220px;" />
+        <p style="font-size:11px;color:#888;letter-spacing:2px;text-transform:uppercase;">Scan to Request Room Service</p>
+        <p style="font-size:9px;color:#bbb;">Coorg Pristine Woods</p>
+        <script>window.onload=()=>{window.print();window.close()}<\/script>
+      </body></html>
+    `)
+    win.document.close()
+  }
+
   return (
     <DashboardLayout>
       <div className="max-w-full mx-auto px-4 md:px-6">
         <header className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
             <h1 className="text-3xl font-light tracking-wide mb-2">Room Inventory</h1>
-            <p className="text-muted-foreground text-sm tracking-wide">Manage room availability, pricing, and amenities.</p>
+            <p className="text-muted-foreground text-sm tracking-wide">Manage room availability, pricing, amenities and QR codes.</p>
           </div>
-          
-          <button 
+          <button
             onClick={() => setIsAdding(true)}
             className="flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground text-xs tracking-[0.2em] uppercase hover:bg-primary/90 transition-all font-bold"
           >
@@ -66,6 +105,7 @@ export default function AdminRooms() {
           </button>
         </header>
 
+        {/* Add Room Modal */}
         {isAdding && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-6">
             <div className="absolute inset-0 bg-primary/40 backdrop-blur-sm" onClick={() => setIsAdding(false)} />
@@ -80,7 +120,7 @@ export default function AdminRooms() {
                 <div className="grid md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <label className="text-[10px] tracking-widest uppercase text-muted-foreground font-bold">Room Name</label>
-                    <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-secondary/30 border border-border p-3 text-sm focus:outline-none focus:ring-1 focus:ring-accent" placeholder="e.g. Palace Suite #6" />
+                    <input required type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-secondary/30 border border-border p-3 text-sm focus:outline-none focus:ring-1 focus:ring-accent" placeholder="e.g. Forest Suite #3" />
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] tracking-widest uppercase text-muted-foreground font-bold">Max Capacity</label>
@@ -110,6 +150,60 @@ export default function AdminRooms() {
           </div>
         )}
 
+        {/* QR Code Modal */}
+        {qrRoom && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-primary/50 backdrop-blur-sm" onClick={() => setQrRoom(null)} />
+            <div className="relative w-full max-w-sm bg-background border border-border shadow-2xl animate-in fade-in zoom-in-95 duration-300">
+              <header className="p-6 border-b border-border flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-light tracking-wide">Room QR Code</h2>
+                  <p className="text-xs text-accent tracking-widest uppercase mt-0.5">{qrRoom.name}</p>
+                </div>
+                <button onClick={() => setQrRoom(null)} className="text-muted-foreground hover:text-foreground">
+                  <X className="w-5 h-5" />
+                </button>
+              </header>
+
+              <div className="p-8 flex flex-col items-center gap-6">
+                <div ref={qrRef} className="p-4 bg-white border border-border">
+                  <QRCodeCanvas
+                    value={servicePortalUrl(qrRoom.id)}
+                    size={200}
+                    bgColor="#ffffff"
+                    fgColor="#1a2e1a"
+                    level="H"
+                    includeMargin={false}
+                  />
+                </div>
+
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground mb-1">Guests scan this to request room service</p>
+                  <p className="text-[10px] text-muted-foreground/60 font-mono break-all">{servicePortalUrl(qrRoom.id)}</p>
+                </div>
+
+                <div className="flex gap-3 w-full">
+                  <button
+                    onClick={handleDownloadQR}
+                    className="flex-1 flex items-center justify-center gap-2 py-3 border border-border text-xs tracking-widest uppercase hover:bg-secondary transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    Download
+                  </button>
+                  <button
+                    onClick={handlePrintQR}
+                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-primary text-primary-foreground text-xs tracking-widest uppercase hover:bg-primary/90 transition-colors"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    Print
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Room Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {loading ? (
             <div className="col-span-full py-20 flex justify-center">
@@ -139,7 +233,16 @@ export default function AdminRooms() {
                   <div className="flex items-start justify-between mb-4">
                     <h3 className="text-xl font-light tracking-wide">{room.name}</h3>
                     <div className="flex gap-2">
-                      <button className="p-2 text-muted-foreground hover:text-accent transition-colors"><Edit2 className="w-4 h-4" /></button>
+                      <button
+                        onClick={() => setQrRoom(room)}
+                        title="View QR Code"
+                        className="p-2 text-muted-foreground hover:text-accent transition-colors"
+                      >
+                        <QrCode className="w-4 h-4" />
+                      </button>
+                      <button className="p-2 text-muted-foreground hover:text-accent transition-colors">
+                        <Edit2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
 
@@ -152,7 +255,7 @@ export default function AdminRooms() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Eye className="w-3 h-3" />
-                      Lake View
+                      Forest View
                     </div>
                   </div>
 
@@ -161,7 +264,13 @@ export default function AdminRooms() {
                       <p className="text-[10px] tracking-widest uppercase text-muted-foreground mb-1">Nightly Rate</p>
                       <p className="text-lg font-light">₹ {Number(room.price_per_night).toLocaleString()}</p>
                     </div>
-                    <button className="text-[10px] tracking-widest uppercase text-accent font-bold hover:underline">Manage Settings</button>
+                    <button
+                      onClick={() => setQrRoom(room)}
+                      className="flex items-center gap-1.5 text-[10px] tracking-widest uppercase text-accent font-bold hover:underline"
+                    >
+                      <QrCode className="w-3 h-3" />
+                      QR Code
+                    </button>
                   </div>
                 </div>
               </div>

@@ -57,24 +57,50 @@ export function AvailabilityCalendar({
   }
 
   return (
-    <div className="bg-background border border-border p-4 shadow-sm w-fit mx-auto lg:mx-0">
+    <div className="bg-transparent p-0 mx-auto lg:mx-0">
       <style>{`
+        .luxury-calendar {
+          background: transparent;
+          font-family: inherit;
+        }
         .rdp {
-          --rdp-cell-size: 40px;
-          --rdp-accent-color: #1A3C34;
-          --rdp-background-color: #E8F0EE;
+          --rdp-cell-size: 44px;
+          --rdp-accent-color: #8B1A10; /* Deep Burgundy for accents */
+          --rdp-background-color: #F7E7E7; /* Light Rose for range select */
           margin: 0;
         }
         .rdp-day_selected, .rdp-day_selected:focus-visible, .rdp-day_selected:hover {
           background-color: var(--rdp-accent-color);
           color: white;
+          border-radius: 2px;
+        }
+        .rdp-day_range_middle {
+          background-color: var(--rdp-background-color) !important;
+          color: var(--rdp-accent-color) !important;
         }
         .rdp-button:hover:not([disabled]):not(.rdp-day_selected) {
-          background-color: #F8F5F0;
+          background-color: #FDECEC;
         }
         .rdp-day_disabled {
           text-decoration: line-through;
-          opacity: 0.3;
+          opacity: 0.2;
+          cursor: not-allowed;
+        }
+        .rdp-head_cell {
+          font-size: 10px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.1em;
+          color: #4A4A4A;
+        }
+        .rdp-month_caption {
+          font-family: serif;
+          font-size: 18px;
+          font-style: italic;
+          color: #2D2D2D;
+          border-bottom: 1px solid #E8E8E8;
+          padding-bottom: 1rem;
+          margin-bottom: 1rem;
         }
       `}</style>
       <DayPicker
@@ -85,18 +111,14 @@ export function AvailabilityCalendar({
         numberOfMonths={1}
         className="luxury-calendar"
         footer={
-          <div className="mt-4 pt-4 border-t border-border flex flex-wrap gap-4 text-[10px] tracking-widest uppercase text-muted-foreground">
+          <div className="mt-8 flex flex-wrap justify-between gap-4 text-[9px] tracking-[0.2em] uppercase text-muted-foreground font-bold">
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-accent"></div>
-              <span>Selected</span>
+              <div className="w-3 h-3 bg-[#8B1A10]"></div>
+              <span>Active Selection</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-muted opacity-30 line-through"></div>
+              <div className="w-3 h-3 bg-muted opacity-50 line-through"></div>
               <span>Sold Out</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full border border-border"></div>
-              <span>Available</span>
             </div>
           </div>
         }
